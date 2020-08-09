@@ -1,0 +1,26 @@
+batch_size: 64
+epochs: 1000
+weight_decay: 10e-6
+eval_every_n_epochs: 1
+log_every_n_steps: 50
+
+model:
+  base_model: "resnet50"
+  out_dim: 512
+
+dataset:
+  dataset_name: "coco2014"
+  dataset_path: "PATH_TO_DATASET"
+  s: 1
+  input_shape: 224 # Input shape: 3 x 224 x 224
+  num_workers: 3
+  valid_size: 0.05
+
+loss:
+  temperature: 0.5
+  use_cosine_similarity: True
+
+# Output
+method: "simclr"
+outputs_path: "outputs/"
+experiment_name: "coco2014"
