@@ -26,7 +26,7 @@ class ResNet(nn.Module):
         self.linear2 = nn.Linear(num_ftrs, out_dim)
 
     def forward(self, x):
-        # x: B x 3 x H x W
+        # Shape x: B x 3 x H x W
 
         h = self.features(x) 
         # B x NUM_FEATS x 1 x 1

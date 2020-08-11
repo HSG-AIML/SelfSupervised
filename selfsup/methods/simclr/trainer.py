@@ -1,179 +1,161 @@
-# import python libraries
 import numpy as np
-
-# import torch libraries
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-
-# import project libraries
+import os
 from selfsup.utils.base_trainer import BaseTrainer
 from selfsup.methods.simclr.models.resnet import ResNet
 from selfsup.methods.simclr.loss import NTXentLoss
 from selfsup.methods.simclr.datasets.coco import get_coco_dataloaders
 
-# define trainer class
+
 class Trainer(BaseTrainer):
-
-    # define class constructor
+    r"""Trainer for SimCLR method."""
     def __init__(self, config):
-
-        # call super class constructor
+        # Call super class constructor
         super(Trainer, self).__init__(config)
 
-        # init optimization criterion
+        # Init optimization criterion
         self.criterion = NTXentLoss(self.device, self.config["batch_size"], **self.config["loss"])
 
-        # init data loaders
+        # Init data loaders
         self._get_dataloaders()
 
-        # init the backbone model
-        self.model = ResNet(**self.config["model"]).to(self.device)
-
-        # init the optimizer TODO: Fixed init learning rate? Maybe flexible hyperparameter?
-        self.optimizer = optim.Adam(params=self.model.parameters(), lr=3e-4, weight_decay=eval(self.config['weight_decay']))
-
-        # init the learning rate scheduler
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer, T_max=len(self.train_loader), eta_min=0, last_epoch=-1)
-
-    # define data loader initializations
-    def _get_dataloaders(self):
-
-        r"""Gets dataloaders for train and validation."""
-
-        # case: coco2014 dataset selected
-        if self.config["dataset"]["dataset_name"] == "coco2014":
-
-            # init the coco2014 data loaders
-            self.train_loader, self.valid_loader = get_coco_dataloaders(self.config)
-
-        # case: unknown dataset selected
+        # Init the backbone model
+        if self.config["model"]["base_model"].startswith("resnet"):
+            self.model = ResNet(**self.config["model"]).to(self.device)
         else:
+            raise RuntimeError(f'Base model {self.config["model"]["base_model"]} not defined.')
+        
+        # Init the optimizer
+        self.optimizer = optim.Adam(params=self.model.parameters(), 
+                                    lr=self.config["lr"], 
+                                    weight_decay=eval(self.config['weight_decay']))
 
-            # raise runtime error
+        # Init the learning rate scheduler
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer=self.optimizer, 
+                                                              T_max=len(self.train_loader), 
+                                                              eta_min=self.config['scheduler_eta_min'], 
+                                                              last_epoch=self.config['scheduler_last_epoch'])
+
+    def _get_dataloaders(self):
+        r"""Returns data loaders for train and validation."""
+        # Case: COCO-2014 dataset
+        if self.config["dataset"]["dataset_name"] == "coco2014":
+            self.train_loader, self.valid_loader = get_coco_dataloaders(self.config)
+        else:
+            # Raise error if dataset is defined
             raise RuntimeError("Dataset is not defined.")
 
-    # define single simclr training step
     def _simclr_step(self, xis, xjs):
-
-        r"""Applies model to an input pair and returns the loss."""
-
-        # obtain representations and projection feature vectors
+        r"""Sigle SimCLR step: feeds an input pair to the model and returns the loss."""
+        # Obtain representations and projection feature vectors
         ris, zis = self.model(xis)  # [N,C]
         rjs, zjs = self.model(xjs)  # [N,C]
 
-        # normalize projection feature vectors
+        # Normalize projection feature vectors
         zis = F.normalize(zis, dim=1)
         zjs = F.normalize(zjs, dim=1)
         
-        # compute contrastive loss
+        # Compute contrastive loss
         loss = self.criterion(zis, zjs)
 
-        # return contrastive loss
         return loss
 
     # define simclr training process TODO: Maybe rename to "training_epoch"?
     def train(self):
+        r"""Start training of the model."""
+        # Init global iteration count
+        self.global_itr = 0
 
-        # init iteration count
-        n_iter = 0
-
-        # TODO: Remove, since not used?
-        valid_n_iter = 0
-
-        # init best validation loss
+        # Init best validation loss with +infinity
         best_valid_loss = np.inf
 
-        # iterate over training epochs
+        # Iterate over training epochs
         for epoch_counter in range(self.config['epochs']):
+            # Train the model for one epoch
+            self._train_epoch()
 
-            # iterate over training mini batches
-            for (xis, xjs) in self.train_loader:
-
-                # reset optimizer gradients
-                self.optimizer.zero_grad()
-
-                # push mini batch data to compute device
-                xis = xis.to(self.device)
-                xjs = xjs.to(self.device)
-
-                # run single simclr training iteration
-                loss = self._simclr_step(xis, xjs)
-
-                # case: logging step reached
-                if n_iter % self.config['log_every_n_steps'] == 0:
-
-                    # record training loss
-                    self.writer.add_scalar('train_loss', loss, global_step=n_iter)
-
-                    # log training iteration and corresponding loss
-                    print(f"Step {n_iter}, loss: {loss.item()}")
-
-                # run backward pass
-                loss.backward()
-
-                # optimize model parameter
-                self.optimizer.step()
-
-                # increase iteration count
-                n_iter += 1
-
-            # case: validation epoch reached
+            # Case: validation epoch reached
             if epoch_counter % self.config['eval_every_n_epochs'] == 0:
-
-                # run model validation
+                # Run model validation
                 valid_loss = self._validate_epoch()
-
-                # case: improved model found
+                # Case: improved model found (lower loss the the pervious valid loss)
                 if valid_loss < best_valid_loss:
-
-                    # reset best validation loss
+                    # Update best validation loss
                     best_valid_loss = valid_loss
-
-                    # save model parameters TODO: import os library?, What's about saving also the optimizer and learning rate?
+                    # Save model parameters
                     torch.save(self.model.state_dict(), os.path.join(self.path_manager.checkpoints_path, 'best_model.pth'))
+                    # Save optimizer parameters
+                    torch.save(self.optimizer.state_dict(), os.path.join(self.path_manager.checkpoints_path, 'best_optim.pth'))
 
-                self.writer.add_scalar('validation_loss', valid_loss, global_step=n_iter)
+                self.writer.add_scalar('validation_loss', valid_loss, global_step=self.global_itr)
 
-            # warmup for the first n epochs TODO: Maybe flexible hyperparameter?
-            if epoch_counter >= 10:
+            # Warmup for the first n epochs
+            if epoch_counter >= self.config["warmup_epochs"]:
+                # Update learning rate 
+                self.scheduler.step()
 
-                # update learning rate TODO: Should be self.scheduler.step()?
-                scheduler.step()
+            # Record the actual learning rate TODO
+            self.writer.add_scalar('cosine_lr_decay', self.scheduler.get_lr()[0], global_step=self.global_itr)
 
-            # record the actual learning rate TODO: Should be self.scheduler.get_lr()?
-            self.writer.add_scalar('cosine_lr_decay', scheduler.get_lr()[0], global_step=n_iter)
+    def _train_epoch(self):
+        r"""Trains the model for one epoch."""
+        # Iterate over training mini batches
+        for (xis, xjs) in self.train_loader:
+            # Reset optimizer gradients
+            self.optimizer.zero_grad()
 
-    # define single simclr validation epoch
+            # Push mini batch data to compute device
+            xis = xis.to(self.device)
+            xjs = xjs.to(self.device)
+
+            # Run single simclr training iteration
+            loss = self._simclr_step(xis, xjs)
+
+            # Case: logging step reached
+            if self.global_itr % self.config['log_every_n_steps'] == 0:
+                # Record training loss
+                self.writer.add_scalar('train_loss', loss, global_step=self.global_itr)
+                # Log training iteration and corresponding loss
+                print(f"Step {self.global_itr}, loss: {loss.item()}")
+
+            # Run backward pass
+            loss.backward()
+
+            # Optimize model parameter
+            self.optimizer.step()
+
+            # Increase global iteration count
+            self.global_itr += 1
+
     def _validate_epoch(self):
-
-        # ignore gradients
+        r"""Runs model vaidation."""
+        # Ignore gradients
+        print("Validating model ...")
         with torch.no_grad():
-
-            # set model into validation mode
+            # Set model mode to validation
             self.model.eval()
 
-            # init validation loss
+            # Init validation loss
             valid_loss = 0.0
 
-            # iterate over training mini batches
+            # Iterate over training mini batches
             for (xis, xjs) in self.valid_loader:
-
-                # push mini batch data to compute device
+                # Push mini batch data to compute device
                 xis = xis.to(self.device)
                 xjs = xjs.to(self.device)
 
-                # run single simclr validation iteration
+                # Run single simclr validation iteration
                 loss = self._simclr_step(xis, xjs)
 
-                # collect and accumulate validation loss
+                # Collect and accumulate validation loss
                 valid_loss += loss.item()
 
-            # normalize validation loss by number of mini batches
+            # Normalize validation loss by number of mini batches
             valid_loss /= len(self.valid_loader)
 
-        # set model into training mode
+        # Set model into training mode
         self.model.train()
 
-        # return validation loss
         return valid_loss

@@ -1,26 +1,36 @@
+# Training params
 batch_size: 64
 epochs: 1000
-weight_decay: 10e-6
 eval_every_n_epochs: 1
 log_every_n_steps: 50
+warmup_epochs: 10
 
+# Optimizer params
+lr: 0.0004
+weight_decay: 10e-6
+scheduler_eta_min: 0
+scheduler_last_epoch: -1
+
+# Model params
 model:
   base_model: "resnet50"
   out_dim: 512
 
+# Dataset params
 dataset:
   dataset_name: "coco2014"
-  dataset_path: "PATH_TO_DATASET"
+  dataset_path: "/raid/hhemati/Datasets/Image/COCO/2014/"
   s: 1
   input_shape: 224 # Input shape: 3 x 224 x 224
   num_workers: 3
   valid_size: 0.05
 
+# Loss params
 loss:
   temperature: 0.5
   use_cosine_similarity: True
 
-# Output
+# Run params
 method: "simclr"
 outputs_path: "outputs/"
 experiment_name: "coco2014"
