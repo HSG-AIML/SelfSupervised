@@ -3,6 +3,8 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 import os
+import datetime as dt
+from tqdm import tqdm
 from selfsup.utils.base_trainer import BaseTrainer
 from selfsup.methods.simclr.models.resnet import ResNet
 from selfsup.methods.simclr.loss import NTXentLoss
@@ -74,13 +76,13 @@ class Trainer(BaseTrainer):
         # Iterate over training epochs
         for epoch_counter in range(self.config['epochs']):
             # Train the model for one epoch
-            self._train_epoch()
+            self._train_epoch(epoch=epoch_counter)
 
             # Case: validation epoch reached
             if epoch_counter % self.config['eval_every_n_epochs'] == 0:
                 # Run model validation
-                valid_loss = self._validate_epoch()
-                # Case: improved model found (lower loss the the pervious valid loss)
+                valid_loss = self._validate_epoch(epoch=epoch_counter)
+                # Case: improved model found (lower loss the the previous valid loss)
                 if valid_loss < best_valid_loss:
                     # Update best validation loss
                     best_valid_loss = valid_loss
@@ -96,11 +98,14 @@ class Trainer(BaseTrainer):
                 # Update learning rate 
                 self.scheduler.step()
 
-            # Record the actual learning rate TODO
+            # Record the actual learning rate
             self.writer.add_scalar('cosine_lr_decay', self.scheduler.get_lr()[0], global_step=self.global_itr)
 
-    def _train_epoch(self):
+    def _train_epoch(self, epoch):
         r"""Trains the model for one epoch."""
+        # wrap training loader into progress bar
+        self.train_loader = tqdm(self.train_loader)
+
         # Iterate over training mini batches
         for (xis, xjs) in self.train_loader:
             # Reset optimizer gradients
@@ -113,12 +118,16 @@ class Trainer(BaseTrainer):
             # Run single simclr training iteration
             loss = self._simclr_step(xis, xjs)
 
+            # Log iteration and corresponding loss
+            self.train_loader.set_description(
+                (f"[INFO {dt.datetime.utcnow().strftime('%Y.%m.%d-%H:%M:%S')}] SimCLR Model Train :: "
+                 f"epoch: {epoch}/{self.config['epochs']}, train-iteration loss: {np.round(loss.item(), 5)}.")
+            )
+
             # Case: logging step reached
             if self.global_itr % self.config['log_every_n_steps'] == 0:
                 # Record training loss
                 self.writer.add_scalar('train_loss', loss, global_step=self.global_itr)
-                # Log training iteration and corresponding loss
-                print(f"Step {self.global_itr}, loss: {loss.item()}")
 
             # Run backward pass
             loss.backward()
@@ -129,10 +138,14 @@ class Trainer(BaseTrainer):
             # Increase global iteration count
             self.global_itr += 1
 
-    def _validate_epoch(self):
+    def _validate_epoch(self, epoch):
         r"""Runs model vaidation."""
-        # Ignore gradients
         print("Validating model ...")
+
+        # wrap validation loader into progress bar
+        self.valid_loader = tqdm(self.valid_loader)
+
+        # Ignore gradients
         with torch.no_grad():
             # Set model mode to validation
             self.model.eval()
@@ -148,6 +161,12 @@ class Trainer(BaseTrainer):
 
                 # Run single simclr validation iteration
                 loss = self._simclr_step(xis, xjs)
+
+                # Log iteration and corresponding loss
+                self.train_loader.set_description(
+                    (f"[INFO {dt.datetime.utcnow().strftime('%Y.%m.%d-%H:%M:%S')}] SimCLR Model Valid :: "
+                     f"epoch: {epoch}/{self.config['epochs']}, valid-iteration loss: {np.round(loss.item(), 5)}.")
+                )
 
                 # Collect and accumulate validation loss
                 valid_loss += loss.item()
