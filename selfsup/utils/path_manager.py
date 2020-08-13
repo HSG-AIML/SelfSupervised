@@ -2,8 +2,7 @@ import os
 
 
 class PathManager():
-    r"""
-    Manages output folder by initializing them and saving paths
+    r"""Manages output folder by initializing them and saving paths
     to each output sub-folder.
     """
     def __init__(self, output_path):
