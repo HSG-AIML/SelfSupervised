@@ -6,7 +6,7 @@ import os
 import datetime as dt
 from tqdm import tqdm
 from selfsup.utils.base_trainer import BaseTrainer
-from selfsup.methods.simclr.models.resnet import ResNet
+from selfsup.methods.simclr.models.simclr_model import SimCLRModel
 from selfsup.methods.simclr.loss import NTXentLoss
 from selfsup.methods.simclr.datasets.coco import get_coco_dataloaders
 
@@ -24,10 +24,7 @@ class Trainer(BaseTrainer):
         self._get_dataloaders()
 
         # Init the backbone model
-        if self.config["model"]["base_model"].startswith("resnet"):
-            self.model = ResNet(**self.config["model"]).to(self.device)
-        else:
-            raise RuntimeError(f'Base model {self.config["model"]["base_model"]} not defined.')
+        self.model = SimCLRModel(**self.config["model"]).to(self.device)
         
         # Init the optimizer
         self.optimizer = optim.Adam(params=self.model.parameters(), 
