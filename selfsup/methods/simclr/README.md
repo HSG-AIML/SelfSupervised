@@ -5,11 +5,11 @@ https://github.com/sthalles/SIMCLR
 
 ### Results on COCO 2014
 
-Training Loss
-<img src="assets/simclr_coco2014_trainloss.png" width=500 >
+Training Loss<br>
+<img src="assets/simclr_coco2014_trainloss.png" width=500 ><br>
 
-Validation Loss
-<img src="assets/simclr_coco2014_evalloss.png" width=500 >
+Validation Loss<br>
+<img src="assets/simclr_coco2014_evalloss.png" width=500 ><br>
 
-LR Decay
-<img src="assets/simclr_coco2014_lrdecay.png" width=500 >
+LR Decay<br>
+<img src="assets/simclr_coco2014_lrdecay.png" width=500 ><br>
