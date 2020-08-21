@@ -13,16 +13,23 @@ scheduler_last_epoch: -1
 
 # Model params
 model:
-  base_model: "resnet50"
-  out_dim: 512
+  # Feature extractor
+  feature_extractor:
+    feature_extractor_name: "resnet50"
+  # Projection head
+  proj_head:
+    proj_head_name: "double_linear"
+    feat_dim: 2048
+    out_dim: 512
+
 
 # Dataset params
 dataset:
   dataset_name: "coco2014"
-  dataset_path: "/raid/hhemati/Datasets/Image/COCO/2014/"
+  dataset_path: "PATH TO DATASET ROOT"
   s: 1
   input_shape: 224 # Input shape: 3 x 224 x 224
-  num_workers: 3
+  num_workers: 5
   valid_size: 0.05
 
 # Loss params
@@ -32,5 +39,6 @@ loss:
 
 # Run params
 method: "simclr"
+model_name: "SimCLRModel"
 outputs_path: "outputs/"
 experiment_name: "coco2014"
