@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 import os
+import importlib
 import datetime as dt
 from tqdm import tqdm
 from selfsup.utils.base_trainer import BaseTrainer
@@ -23,9 +24,15 @@ class Trainer(BaseTrainer):
         # Init data loaders
         self._get_dataloaders()
 
-        # Init the backbone model
-        self.model = SimCLRModel(**self.config["model"]).to(self.device)
-        
+        # Get model module dynamically 
+        model_module = importlib.import_module(f"selfsup.methods.{config['method']}.model")
+
+        # Get model class corresponding to model_name
+        model_module = getattr(model_module, config['model_name'])
+
+        # Init model
+        self.model = model_module(**self.config["model"]).to(self.device)
+
         # Init the optimizer
         self.optimizer = optim.Adam(params=self.model.parameters(), 
                                     lr=self.config["lr"], 
