@@ -5,8 +5,10 @@ full_path=$0
 CONFIG_PATH=$(dirname "$full_path")
 echo $CONFIG_PATH
 
-OUTPUT_PATH="outputs/extracted_features"
+
 TASK_NAME="feature_extraction"
+
+OUTPUT_PATH="outputs/extracted_features"
 CHECKPOINT_PATH="PATH TO CHECKPOINT"
 DATASET="coco2014"
 DATASET_PATH="PATH TO DATASET"
